@@ -26,28 +26,40 @@ jobs:
           cd src
           mkdir -p test-output
 
-          # 检查双端测试数据是否存在
+          # 检查双端测试数据是否存在且包含FASTQ文件
           if [ ! -d "test-data/paired-end" ]; then
-            echo "Error: Paired-end test data not found in test-data/paired-end"
+            echo "Error: Paired-end test data directory not found in test-data/paired-end"
+            exit 1
+          elif [ -z "$(ls -A test-data/paired-end)" ]; then
+            echo "Error: No FASTQ files found in test-data/paired-end directory"
+            exit 1
+          elif [ -z "$(ls -A test-data/paired-end | grep -E '\.fastq(\.gz)?$')" ]; then
+            echo "Error: No FASTQ files found in test-data/paired-end directory"
             exit 1
           fi
 
-          # 检查单端测试数据是否存在
+          # 检查单端测试数据是否存在且包含FASTQ文件
           if [ ! -d "test-data/single-end" ]; then
-            echo "Error: Single-end test data not found in test-data/single-end"
+            echo "Error: Single-end test data directory not found in test-data/single-end"
+            exit 1
+          elif [ -z "$(ls -A test-data/single-end)" ]; then
+            echo "Error: No FASTQ files found in test-data/single-end directory"
+            exit 1
+          elif [ -z "$(ls -A test-data/single-end | grep -E '\.fastq(\.gz)?$')" ]; then
+            echo "Error: No FASTQ files found in test-data/single-end directory"
             exit 1
           fi
 
           # 测试双端数据
           docker run --rm \
-            -v $(pwd)/test-data/paired-end:/mnt/in/paired \  # 挂载到容器内的 /mnt/in/paired
-            -v $(pwd)/test-output/paired:/mnt/out/paired \    # 挂载到容器内的 /mnt/out/paired
+            -v $(pwd)/test-data/paired-end:/mnt/in/paired \
+            -v $(pwd)/test-output/paired:/mnt/out/paired \
             fastp-trimmer:test
 
           # 测试单端数据
           docker run --rm \
-            -v $(pwd)/test-data/single-end:/mnt/in/single \  # 挂载到容器内的 /mnt/in/single
-            -v $(pwd)/test-output/single:/mnt/out/single \    # 挂载到容器内的 /mnt/out/single
+            -v $(pwd)/test-data/single-end:/mnt/in/single \
+            -v $(pwd)/test-output/single:/mnt/out/single \
             fastp-trimmer:test
 
           # 验证输出文件
