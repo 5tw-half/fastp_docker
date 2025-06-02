@@ -25,19 +25,31 @@ jobs:
         run: |
           cd src
           mkdir -p test-output
-          
+
+          # 检查双端测试数据是否存在
+          if [ ! -d "test-data/paired-end" ]; then
+            echo "Error: Paired-end test data not found in test-data/paired-end"
+            exit 1
+          fi
+
+          # 检查单端测试数据是否存在
+          if [ ! -d "test-data/single-end" ]; then
+            echo "Error: Single-end test data not found in test-data/single-end"
+            exit 1
+          fi
+
           # 测试双端数据
           docker run --rm \
-            -v $(pwd)/test-data/paired-end:/mnt/in \
-            -v $(pwd)/test-output/paired:/mnt/out \
+            -v $(pwd)/test-data/paired-end:/mnt/in/paired \  # 挂载到容器内的 /mnt/in/paired
+            -v $(pwd)/test-output/paired:/mnt/out/paired \    # 挂载到容器内的 /mnt/out/paired
             fastp-trimmer:test
-          
+
           # 测试单端数据
           docker run --rm \
-            -v $(pwd)/test-data/single-end:/mnt/in \
-            -v $(pwd)/test-output/single:/mnt/out \
+            -v $(pwd)/test-data/single-end:/mnt/in/single \  # 挂载到容器内的 /mnt/in/single
+            -v $(pwd)/test-output/single:/mnt/out/single \    # 挂载到容器内的 /mnt/out/single
             fastp-trimmer:test
-          
+
           # 验证输出文件
           ls -lh test-output/paired
           ls -lh test-output/single
