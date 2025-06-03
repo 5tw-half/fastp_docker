@@ -66,16 +66,21 @@ jobs:
           echo "生成的文件列表:"
           find test-output -type f
 
-      - name: Push to GHCR
+      - name: Push to Docker Hub
         if: success()
         run: |
           cd src
-          # 使用您的 GitHub 用户名 - 替换 "your-github-username" 为您的实际用户名
-          USERNAME="5tw-half"
-          IMAGE_NAME="ghcr.io/$USERNAME/fastp-trimmer"
+          # 使用 Docker Hub 用户名 - 替换 "your-dockerhub-username" 为您的实际用户名
+          DOCKERHUB_USERNAME="your-dockerhub-username"
+          IMAGE_NAME="$DOCKERHUB_USERNAME/fastp-trimmer"
           
+          # 标记镜像
           docker tag fastp-trimmer:test $IMAGE_NAME:${{ github.sha }}
           docker tag fastp-trimmer:test $IMAGE_NAME:latest
-          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          
+          # 登录到 Docker Hub
+          echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u $DOCKERHUB_USERNAME --password-stdin
+          
+          # 推送镜像
           docker push $IMAGE_NAME:${{ github.sha }}
           docker push $IMAGE_NAME:latest
