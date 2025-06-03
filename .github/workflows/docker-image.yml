@@ -70,8 +70,12 @@ jobs:
         if: success()
         run: |
           cd src
-          docker tag fastp-trimmer:test ghcr.io/${{ github.repository_owner }}/fastp-trimmer:${{ github.sha }}
-          docker tag fastp-trimmer:test ghcr.io/${{ github.repository_owner }}/fastp-trimmer:latest
+          # 使用您的 GitHub 用户名 - 替换 "your-github-username" 为您的实际用户名
+          USERNAME="5tw-half"
+          IMAGE_NAME="ghcr.io/$USERNAME/fastp-trimmer"
+          
+          docker tag fastp-trimmer:test $IMAGE_NAME:${{ github.sha }}
+          docker tag fastp-trimmer:test $IMAGE_NAME:latest
           echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          docker push ghcr.io/${{ github.repository_owner }}/fastp-trimmer:${{ github.sha }}
-          docker push ghcr.io/${{ github.repository_owner }}/fastp-trimmer:latest
+          docker push $IMAGE_NAME:${{ github.sha }}
+          docker push $IMAGE_NAME:latest
