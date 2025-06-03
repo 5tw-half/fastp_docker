@@ -65,31 +65,3 @@ jobs:
           # 显示所有输出文件
           echo "生成的文件列表:"
           find test-output -type f
-
-      - name: Push to Docker Hub
-        if: success()
-        run: |
-          cd src
-          # 设置环境变量
-          DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
-          IMAGE_NAME="$DOCKERHUB_USERNAME/fastp-trimmer"
-          
-          # 标记镜像
-          docker tag fastp-trimmer:test $IMAGE_NAME:${{ github.sha }}
-          docker tag fastp-trimmer:test $IMAGE_NAME:latest
-          
-          # 使用官方登录动作替代命令行登录
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-        
-      - name: Push Docker images
-        if: success()
-        run: |
-          cd src
-          DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
-          IMAGE_NAME="$DOCKERHUB_USERNAME/fastp-trimmer"
-          
-          docker push $IMAGE_NAME:${{ github.sha }}
-          docker push $IMAGE_NAME:latest
