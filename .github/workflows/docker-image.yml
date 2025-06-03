@@ -70,17 +70,26 @@ jobs:
         if: success()
         run: |
           cd src
-          # 使用 Docker Hub 用户名 - 替换 "your-dockerhub-username" 为您的实际用户名
-          DOCKERHUB_USERNAME="your-dockerhub-username"
+          # 设置环境变量
+          DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
           IMAGE_NAME="$DOCKERHUB_USERNAME/fastp-trimmer"
           
           # 标记镜像
           docker tag fastp-trimmer:test $IMAGE_NAME:${{ github.sha }}
           docker tag fastp-trimmer:test $IMAGE_NAME:latest
           
-          # 登录到 Docker Hub
-          echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u $DOCKERHUB_USERNAME --password-stdin
+          # 使用官方登录动作替代命令行登录
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        
+      - name: Push Docker images
+        if: success()
+        run: |
+          cd src
+          DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
+          IMAGE_NAME="$DOCKERHUB_USERNAME/fastp-trimmer"
           
-          # 推送镜像
           docker push $IMAGE_NAME:${{ github.sha }}
           docker push $IMAGE_NAME:latest
