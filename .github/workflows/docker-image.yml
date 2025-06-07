@@ -6,23 +6,13 @@ on:
 
 jobs:
   build-push:
-    # 使用 Docker 容器作为运行环境
     runs-on: ubuntu-latest
-    container:
-      image: docker:24.0.7-dind  # 使用 Docker-in-Docker (dind) 镜像
-      options: --privileged  # 需要特权模式运行 Docker-in-Docker
-      volumes:
-        - /var/run/docker.sock:/var/run/docker.sock  # 挂载 Docker socket
-
     permissions:
       contents: read
       packages: write
 
-    services:
-      # 为 Docker-in-Docker 提供独立服务
-      docker:
-        image: docker:24.0.7-dind
-        options: --privileged
+    # 添加超时设置
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -48,8 +38,11 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/fastp-trimmer:${{ github.sha }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # 使用本地缓存替代
+          cache-from: type=local,src=/tmp/build-cache
+          cache-to: type=local,dest=/tmp/build-cache
+          # 增加构建超时
+          build-timeout: 30m
 
       - name: Verify package creation
         run: |
