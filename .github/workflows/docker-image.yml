@@ -6,10 +6,23 @@ on:
 
 jobs:
   build-push:
+    # 使用 Docker 容器作为运行环境
     runs-on: ubuntu-latest
+    container:
+      image: docker:24.0.7-dind  # 使用 Docker-in-Docker (dind) 镜像
+      options: --privileged  # 需要特权模式运行 Docker-in-Docker
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock  # 挂载 Docker socket
+
     permissions:
       contents: read
-      packages: write  # 必须添加此权限才能推送到 GHCR
+      packages: write
+
+    services:
+      # 为 Docker-in-Docker 提供独立服务
+      docker:
+        image: docker:24.0.7-dind
+        options: --privileged
 
     steps:
       - name: Checkout code
@@ -23,7 +36,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}  # 使用自动生成的 token
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
@@ -35,7 +48,6 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/fastp-trimmer:${{ github.sha }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
