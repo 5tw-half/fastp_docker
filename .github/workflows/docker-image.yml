@@ -1,4 +1,4 @@
-name: Build and Push FASTP Docker Image to GHCR
+name: Build, Push and Release FASTP Docker Image
 
 on:
   push:
@@ -9,13 +9,14 @@ on:
   workflow_dispatch:  # 允许手动触发
 
 jobs:
-  build-and-push:
+  build-push-release:
     runs-on: ubuntu-latest
     
     permissions:
       contents: read
       packages: write
-      id-token: write  # 需要用于GHCR认证
+      id-token: write
+      actions: write  # 需要用于创建 Release
     
     steps:
       - name: Checkout code
@@ -23,33 +24,36 @@ jobs:
         with:
           fetch-depth: 0  # 获取完整历史用于生成变更日志
 
+      # 确定版本号
+      - name: Determine version
+        id: version
+        run: |
+          if [[ ${{ github.event_name }} == 'workflow_dispatch' ]]; then
+            # 手动触发时使用当前日期作为版本
+            VERSION="manual-$(date +"%Y%m%d-%H%M%S")"
+          elif [[ $GITHUB_REF == refs/tags/* ]]; then
+            # 标签推送时使用标签作为版本
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            # 普通推送时使用短 SHA
+            VERSION="sha-${GITHUB_SHA:0:7}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Using version: $VERSION"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Generate image tags
         id: tags
         run: |
-          # 获取短提交SHA
-          SHORT_SHA=${GITHUB_SHA:0:7}
-          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
-          
-          # 获取当前日期
-          DATE_TAG=$(date +"%Y%m%d")
-          echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
-          
-          # 设置镜像名称（使用您的仓库名称）
+          # 设置镜像名称
           IMAGE_NAME="ghcr.io/yangtaotao-7209/code-docker-yangtaotao/fastp-docker"
           
-          # 检查是否标签推送
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-            echo "VERSION=$VERSION" >> $GITHUB_ENV
-            # 标签推送：使用版本标签和latest
-            echo "tags=${IMAGE_NAME}:$VERSION,${IMAGE_NAME}:latest" >> $GITHUB_OUTPUT
-          else
-            # 普通提交：使用短SHA和日期标签
-            echo "tags=${IMAGE_NAME}:$SHORT_SHA,${IMAGE_NAME}:$DATE_TAG,${IMAGE_NAME}:latest" >> $GITHUB_OUTPUT
-          fi
+          # 生成镜像标签
+          echo "tags=${IMAGE_NAME}:${{ env.VERSION }},${IMAGE_NAME}:latest" >> $GITHUB_OUTPUT
+          echo "Generated tags: ${{ steps.tags.outputs.tags }}"
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -68,8 +72,7 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
-      - name: Generate release notes (for tagged releases)
-        if: ${{ env.VERSION != '' }}
+      - name: Generate release notes
         id: release-notes
         run: |
           # 获取变更日志
@@ -82,11 +85,15 @@ jobs:
           
           # 创建发布说明
           NOTES="# FASTP Docker Image Release ${{ env.VERSION }}\n\n"
-          NOTES+="## Image Information\n"
-          NOTES+="**Docker Image:** \`${{ steps.tags.outputs.tags }}\`\n\n"
-          NOTES+="**Pull Command:**\n"
+          NOTES+="## 🐳 Docker Image\n"
+          NOTES+="**Image name:** \`${{ steps.tags.outputs.tags }}\`\n\n"
+          NOTES+="**Pull command:**\n"
           NOTES+="```bash\ndocker pull ${{ steps.tags.outputs.tags }}\n```\n\n"
-          NOTES+="## Changes\n$CHANGELOG"
+          NOTES+="## 📝 Changes\n$CHANGELOG\n\n"
+          NOTES+="## ⚙️ Build Details\n"
+          NOTES+="- **Triggered by:** ${{ github.event_name }}\n"
+          NOTES+="- **Commit SHA:** ${{ github.sha }}\n"
+          NOTES+="- **Run ID:** [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           
           # 输出为多行字符串
           NOTES="${NOTES//'%'/'%25'}"
@@ -95,15 +102,14 @@ jobs:
           echo "notes=$NOTES" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
-        if: ${{ env.VERSION != '' }}
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.VERSION }}
-          release_name: "FASTP Docker ${{ env.VERSION }}"
+          name: "FASTP Docker ${{ env.VERSION }}"
           body: ${{ steps.release-notes.outputs.notes }}
           files: |
             Dockerfile
             entrypoint.sh
           draft: false
-          prerelease: false
+          prerelease: ${{ github.event_name != 'push' }}  # 手动触发时为预发布
           generate_release_notes: false
