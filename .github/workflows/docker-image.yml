@@ -82,19 +82,21 @@ jobs:
           else
             CHANGELOG=$(git log --format='- %s (%h)' -n 10)
           fi
-          
+      
           # 创建发布说明
           NOTES="# FASTP Docker Image Release ${{ env.VERSION }}\n\n"
           NOTES+="## 🐳 Docker Image\n"
           NOTES+="**Image name:** \`${{ steps.tags.outputs.tags }}\`\n\n"
           NOTES+="**Pull command:**\n"
-          NOTES+="```bash\ndocker pull ${{ steps.tags.outputs.tags }}\n```\n\n"
+          NOTES+="```bash\n"
+          NOTES+="docker pull ${{ steps.tags.outputs.tags }}\n"
+          NOTES+="```\n\n"
           NOTES+="## 📝 Changes\n$CHANGELOG\n\n"
           NOTES+="## ⚙️ Build Details\n"
           NOTES+="- **Triggered by:** ${{ github.event_name }}\n"
           NOTES+="- **Commit SHA:** ${{ github.sha }}\n"
           NOTES+="- **Run ID:** [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
-          
+      
           # 输出为多行字符串
           NOTES="${NOTES//'%'/'%25'}"
           NOTES="${NOTES//$'\n'/'%0A'}"
