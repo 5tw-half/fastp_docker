@@ -50,8 +50,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: slgit.yutg.net
-          username: ${{ secrets.REGISTRY_USER }}
-          password: ${{ secrets.REGISTRY_TOKEN }}
+          username: ${{ 123090728@link.cuhk.edu.cn }}
+          password: ${{ yz@CUHK@790802 }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
