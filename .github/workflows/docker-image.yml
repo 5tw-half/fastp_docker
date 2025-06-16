@@ -5,15 +5,16 @@ on:
     branches:
       - main
     tags:
-      - 'v*'  # 匹配 v1.0, v2.0 等标签
-  workflow_dispatch:  # 允许手动触发
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build-push-release:
     runs-on: ubuntu-latest
     
+    # 关键权限设置
     permissions:
-      contents: read
+      contents: write  # 必须设置为 write 才能创建 Release
       packages: write
       id-token: write
       actions: write
@@ -24,7 +25,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 确定版本号
+      # 确保唯一版本号
       - name: Determine version
         id: version
         run: |
@@ -33,7 +34,7 @@ jobs:
           elif [[ $GITHUB_REF == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/}
           else
-            VERSION="sha-${GITHUB_SHA:0:7}"
+            VERSION="sha-${GITHUB_SHA:0:7}-$(date +"%Y%m%d%H%M%S")"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -64,46 +65,7 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
-      # 修复后的发布说明生成步骤
-      - name: Generate release notes
-        id: release-notes
-        run: |
-          # 获取变更日志
-          CHANGELOG=""
-          if [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
-            CHANGELOG=$(git log --format='- %s (%h)' ${{ github.event.before }}..${{ github.sha }})
-          else
-            CHANGELOG=$(git log --format='- %s (%h)' -n 10)
-          fi
-          
-          # 提取镜像名称和标签
-          IMAGE_NAME="ghcr.io/yangtaotao-7209/code-docker-yangtaotao/fastp-docker"
-          VERSION_TAG="${{ env.VERSION }}"
-          LATEST_TAG="latest"
-          
-          # 创建发布说明
-          NOTES="# FASTP Docker Image Release ${{ env.VERSION }}\n\n"
-          NOTES+="## 🐳 Docker Image\n"
-          NOTES+="**Image name:** \`$IMAGE_NAME\`\n\n"
-          NOTES+="**Available tags:**\n"
-          NOTES+="- \`$VERSION_TAG\`\n"
-          NOTES+="- \`$LATEST_TAG\`\n\n"
-          NOTES+="**Pull commands:**\n"
-          NOTES+="```bash\n"
-          NOTES+="docker pull $IMAGE_NAME:$VERSION_TAG\n"
-          NOTES+="docker pull $IMAGE_NAME:$LATEST_TAG\n"
-          NOTES+="```\n\n"
-          NOTES+="## 📝 Changes\n$CHANGELOG\n\n"
-          NOTES+="## ⚙️ Build Details\n"
-          NOTES+="- **Triggered by:** ${{ github.event_name }}\n"
-          NOTES+="- **Commit SHA:** ${{ github.sha }}\n"
-          NOTES+="- **Run ID:** [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n"
-          
-          # 输出为多行字符串
-          NOTES="${NOTES//'%'/'%25'}"
-          NOTES="${NOTES//$'\n'/'%0A'}"
-          NOTES="${NOTES//$'\r'/'%0D'}"
-          echo "notes=$NOTES" >> $GITHUB_OUTPUT
+     
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
