@@ -7,7 +7,6 @@ on:
 
 jobs:
   build-and-push:
-    # 使用标准 runner 避免所有权问题
     runs-on: ubuntu-latest
     
     steps:
@@ -20,15 +19,12 @@ jobs:
       - name: Generate tags
         id: tags
         run: |
-          # 使用 GitHub 提供的环境变量获取 SHA
           SHORT_SHA=${GITHUB_SHA:0:7}
           echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
           
-          # 获取当前日期用于标签
           DATE_TAG=$(date +"%Y%m%d")
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
           
-          # 检查是否有版本标签
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/}
             echo "VERSION=$VERSION" >> $GITHUB_ENV
@@ -36,8 +32,6 @@ jobs:
           else
             echo "tags=slgit.yutg.net/cuhk-haosun/fastp-docker:$SHORT_SHA,slgit.yutg.net/cuhk-haosun/fastp-docker:$DATE_TAG,slgit.yutg.net/cuhk-haosun/fastp-docker:latest" >> $GITHUB_OUTPUT
           fi
-          
-          echo "Generated tags: ${{ steps.tags.outputs.tags }}"
 
       - name: Log in to registry
         env:
@@ -45,7 +39,21 @@ jobs:
           USERNAME: ${{ secrets.REGISTRY_USER }}
           PASSWORD: ${{ secrets.REGISTRY_TOKEN }}
         run: |
-          echo "$PASSWORD" | docker login $REGISTRY -u "$USERNAME" --password-stdin
+          # 确保密码中没有换行符
+          CLEAN_PASSWORD=$(echo -n "${PASSWORD}" | tr -d '\n')
+          
+          # 使用安全方法登录
+          echo "${CLEAN_PASSWORD}" | docker login ${REGISTRY} \
+            -u "${USERNAME}" \
+            --password-stdin 2>/dev/null
+          
+          # 如果失败则尝试备用方法
+          if [ $? -ne 0 ]; then
+            echo "使用备用登录方法..."
+            docker login ${REGISTRY} \
+              -u "${USERNAME}" \
+              -p "${CLEAN_PASSWORD}"
+          fi
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -59,12 +67,12 @@ jobs:
       - name: Create release notes (if tagged)
         if: ${{ env.VERSION != '' }}
         run: |
-          # 使用 GitHub API 获取变更日志
-          CHANGELOG=$(curl -s \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.sha }}" | \
-            jq -r '.commits[] | "- \(.commit.message) (\(.sha[0:7]))"')
+          CHANGELOG=""
+          if [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            CHANGELOG=$(git log --format='- %s (%h)' ${{ github.event.before }}..${{ github.sha }})
+          else
+            CHANGELOG=$(git log --format='- %s (%h)' -n 10)
+          fi
           
           NOTES="Fastp Docker Image Release $VERSION\n\n"
           NOTES+="**Image tags:**\n"
