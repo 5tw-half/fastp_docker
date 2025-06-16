@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-and-push:
-    # 使用 Docker-in-Docker 环境
+    # 使用更可靠的运行器配置
     runs-on: ubuntu-latest
     container:
       image: docker:20.10.16
@@ -20,15 +20,24 @@ jobs:
             git \
             openssh-client \
             bash \
-            jq  # 添加 jq 用于处理 JSON
+            jq
+
+      # 修复 Git 所有权问题
+      - name: Configure Git safe directory
+        run: |
+          git config --global --add safe.directory /__w/$(echo $GITHUB_REPOSITORY | sed 's/\//-/g')/$(echo $GITHUB_REPOSITORY | sed 's/\//-/g')
+          git config --global --add safe.directory /__w/$(echo $GITHUB_REPOSITORY | sed 's/\//-/g')/*
 
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # 明确设置路径避免所有权问题
+          path: ${{ github.workspace }}
 
       - name: Generate tags
         id: tags
         run: |
-          # 获取短 SHA
+          # 安全地获取短 SHA
           SHORT_SHA=$(git rev-parse --short HEAD)
           echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
           
@@ -82,15 +91,22 @@ jobs:
             docker push $TAG
           done
 
-      - name: Create release notes
+      - name: Create release notes (if tagged)
         if: ${{ env.VERSION != '' }}
         run: |
-          # 创建版本说明
+          # 安全地获取变更日志
+          CHANGELOG=""
+          if [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            CHANGELOG=$(git log --pretty=format:'- %s (%h)' ${{ github.event.before }}..${{ github.sha }})
+          else
+            CHANGELOG=$(git log --pretty=format:'- %s (%h)' -n 10)
+          fi
+          
           NOTES="Fastp Docker Image Release $VERSION\n\n"
           NOTES+="**Image tags:**\n"
           NOTES+="\`slgit.yutg.net/cuhk-haosun/fastp-docker:$VERSION\`\n"
           NOTES+="\`slgit.yutg.net/cuhk-haosun/fastp-docker:latest\`\n\n"
-          NOTES+="**Changes:**\n$(git log --pretty=format:'- %s (%h)' ${{ github.event.before }}..${{ github.sha }})"
+          NOTES+="**Changes:**\n$CHANGELOG"
           
           echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
           echo -e "$NOTES" >> $GITHUB_ENV
