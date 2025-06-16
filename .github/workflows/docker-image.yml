@@ -7,38 +7,21 @@ on:
 
 jobs:
   build-and-push:
-    # 使用更可靠的运行器配置
+    # 使用标准 runner 避免所有权问题
     runs-on: ubuntu-latest
-    container:
-      image: docker:20.10.16
-      options: --privileged
-
+    
     steps:
-      - name: Install prerequisites
-        run: |
-          apk add --no-cache \
-            git \
-            openssh-client \
-            bash \
-            jq
-
-      # 修复 Git 所有权问题
-      - name: Configure Git safe directory
-        run: |
-          git config --global --add safe.directory /__w/$(echo $GITHUB_REPOSITORY | sed 's/\//-/g')/$(echo $GITHUB_REPOSITORY | sed 's/\//-/g')
-          git config --global --add safe.directory /__w/$(echo $GITHUB_REPOSITORY | sed 's/\//-/g')/*
-
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          # 明确设置路径避免所有权问题
-          path: ${{ github.workspace }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Generate tags
         id: tags
         run: |
-          # 安全地获取短 SHA
-          SHORT_SHA=$(git rev-parse --short HEAD)
+          # 使用 GitHub 提供的环境变量获取 SHA
+          SHORT_SHA=${GITHUB_SHA:0:7}
           echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
           
           # 获取当前日期用于标签
@@ -46,31 +29,15 @@ jobs:
           echo "DATE_TAG=$DATE_TAG" >> $GITHUB_ENV
           
           # 检查是否有版本标签
-          if echo $GITHUB_REF | grep -q 'refs/tags/'; then
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/}
             echo "VERSION=$VERSION" >> $GITHUB_ENV
             echo "tags=slgit.yutg.net/cuhk-haosun/fastp-docker:$VERSION,slgit.yutg.net/cuhk-haosun/fastp-docker:latest" >> $GITHUB_OUTPUT
           else
             echo "tags=slgit.yutg.net/cuhk-haosun/fastp-docker:$SHORT_SHA,slgit.yutg.net/cuhk-haosun/fastp-docker:$DATE_TAG,slgit.yutg.net/cuhk-haosun/fastp-docker:latest" >> $GITHUB_OUTPUT
           fi
-
-      - name: Build Docker image
-        run: |
-          # 从步骤输出中获取标签列表
-          TAGS=$(echo "${{ steps.tags.outputs.tags }}" | tr ',' '\n')
           
-          # 构建命令
-          BUILD_CMD="docker build"
-          
-          # 为每个标签添加构建参数
-          for TAG in $TAGS; do
-            BUILD_CMD+=" -t $TAG"
-          done
-          
-          BUILD_CMD+=" ."
-          
-          echo "Building with command: $BUILD_CMD"
-          eval $BUILD_CMD
+          echo "Generated tags: ${{ steps.tags.outputs.tags }}"
 
       - name: Log in to registry
         env:
@@ -80,27 +47,24 @@ jobs:
         run: |
           echo "$PASSWORD" | docker login $REGISTRY -u "$USERNAME" --password-stdin
 
-      - name: Push Docker images
-        run: |
-          # 从步骤输出中获取标签列表
-          TAGS=$(echo "${{ steps.tags.outputs.tags }}" | tr ',' '\n')
-          
-          # 推送所有标签
-          for TAG in $TAGS; do
-            echo "Pushing $TAG"
-            docker push $TAG
-          done
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Create release notes (if tagged)
         if: ${{ env.VERSION != '' }}
         run: |
-          # 安全地获取变更日志
-          CHANGELOG=""
-          if [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
-            CHANGELOG=$(git log --pretty=format:'- %s (%h)' ${{ github.event.before }}..${{ github.sha }})
-          else
-            CHANGELOG=$(git log --pretty=format:'- %s (%h)' -n 10)
-          fi
+          # 使用 GitHub API 获取变更日志
+          CHANGELOG=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.sha }}" | \
+            jq -r '.commits[] | "- \(.commit.message) (\(.sha[0:7]))"')
           
           NOTES="Fastp Docker Image Release $VERSION\n\n"
           NOTES+="**Image tags:**\n"
