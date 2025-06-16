@@ -18,7 +18,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Debug: Print secrets availability
+      - name: Debug:Print secrets availability
         run: |
           echo "REGISTRY_USER exists: ${{ secrets.REGISTRY_USER != '' }}"
           echo "REGISTRY_TOKEN exists: ${{ secrets.REGISTRY_TOKEN != '' }}"
